@@ -14,4 +14,7 @@ endif()
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+find_package(OpenSSL REQUIRED)
+add_subdirectory(third_party/grace EXCLUDE_FROM_ALL)
+
 add_subdirectory(lib)

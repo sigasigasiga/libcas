@@ -9,6 +9,7 @@ target_sources(
     CXX_MODULES FILES
 
     concepts.cppm
+    sha256.cppm
 
     module.cppm
 )
@@ -18,5 +19,6 @@ target_link_libraries(
 
     PRIVATE
 
-    #OpenSSL::Crypto
+    grace.fn.bind
+    OpenSSL::Crypto
 )
