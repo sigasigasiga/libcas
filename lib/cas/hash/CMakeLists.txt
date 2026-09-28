@@ -9,6 +9,7 @@ target_sources(
     CXX_MODULES FILES
 
     concepts.cppm
+    constants.cppm
     sha256.cppm
 
     module.cppm

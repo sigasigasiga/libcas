@@ -1,5 +1,6 @@
 module;
 
+#include <cassert>
 #include <memory>
 #include <span>
 
@@ -15,8 +16,6 @@ namespace cas::hash {
 export class sha256
 {
 public:
-    static constexpr std::size_t output_size = SHA256_DIGEST_LENGTH; // 32
-
     sha256()
         : m_ctx(::EVP_MD_CTX_new())
     {
@@ -30,19 +29,24 @@ public:
     }
 
     static constexpr std::size_t digest_size() noexcept {
-        return output_size;
+        return SHA256_DIGEST_LENGTH;
     }
 
     void feed(std::span<std::byte const> in) {
         if (in.empty()) {
             return;
         }
+
         if (::EVP_DigestUpdate(m_ctx.get(), in.data(), in.size()) != 1) {
             throw std::runtime_error("sha256: EVP_DigestUpdate failed");
         }
     }
 
-    void finalize(std::span<std::byte, output_size> out) {
+    void finalize(std::span<std::byte> out) {
+        if (out.size() < digest_size()) {
+            throw std::invalid_argument("sha256::finalize: output size is too small");
+        }
+
         unsigned int len = 0;
 
         int res = ::EVP_DigestFinal_ex(
@@ -55,9 +59,7 @@ public:
             throw std::runtime_error("sha256: EVP_DigestFinal_ex failed");
         }
 
-        if (len != output_size) {
-            throw std::runtime_error("sha256: unexpected digest length");
-        }
+        assert(len == digest_size());
     }
 
 private:
