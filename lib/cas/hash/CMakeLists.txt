@@ -10,6 +10,7 @@ target_sources(
 
     concepts.cppm
     constants.cppm
+    feed.cppm
     sha256.cppm
 
     module.cppm
