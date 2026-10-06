@@ -1,5 +1,7 @@
 module;
 
+#include <cstddef>
+
 #include <openssl/evp.h>
 
 export module cas.hash:constants;

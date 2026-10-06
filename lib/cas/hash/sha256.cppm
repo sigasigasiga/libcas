@@ -3,6 +3,7 @@ module;
 #include <cassert>
 #include <memory>
 #include <span>
+#include <stdexcept>
 
 #include <openssl/evp.h>
 #include <openssl/sha.h>
