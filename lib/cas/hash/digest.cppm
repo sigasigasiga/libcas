@@ -25,7 +25,7 @@ constexpr std::byte from_hex_char(char c) {
     } else if ('A' <= c && c <= 'F') {
         ret = c - 'A' + 10;
     } else {
-        throw std::invalid_argument(std::format("`{}` is not a hex character", c));
+        throw std::invalid_argument(std::format("`{:?}` is not a hex character", c));
     }
 
     return static_cast<std::byte>(ret);
