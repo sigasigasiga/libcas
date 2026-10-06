@@ -17,4 +17,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(OpenSSL REQUIRED)
 add_subdirectory(third_party/grace EXCLUDE_FROM_ALL)
 
+enable_testing()
+
 add_subdirectory(lib)
+
+option(libcas_ENABLE_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
+
+if (libcas_ENABLE_TESTS)
+    add_subdirectory(test)
+endif()
