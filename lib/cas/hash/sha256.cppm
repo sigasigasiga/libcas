@@ -4,7 +4,9 @@ module;
 #include <memory>
 #include <span>
 #include <stdexcept>
+#include <string>
 
+#include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
 
@@ -14,6 +16,27 @@ import grace.fn.bind;
 
 namespace cas::hash {
 
+// Drains the thread's OpenSSL error queue so stale errors don't leak into
+// the next failure report.
+[[noreturn]] void throw_openssl_error(char const *what) {
+    std::string msg = what;
+    char buf[256];
+    bool first = true;
+
+    while (unsigned long err = ::ERR_get_error()) {
+        ::ERR_error_string_n(err, buf, sizeof(buf));
+        msg += first ? ": " : "; ";
+        msg += buf;
+        first = false;
+    }
+
+    if (first) {
+        msg += ": no error reported by OpenSSL";
+    }
+
+    throw std::runtime_error(msg);
+}
+
 export class sha256
 {
 public:
@@ -21,11 +44,11 @@ public:
         : m_ctx(::EVP_MD_CTX_new())
     {
         if (!m_ctx) {
-            throw std::runtime_error("sha256: EVP_MD_CTX_new failed");
+            throw std::bad_alloc();
         }
 
         if (::EVP_DigestInit_ex(m_ctx.get(), ::EVP_sha256(), nullptr) != 1) {
-            throw std::runtime_error("sha256: EVP_DigestInit_ex failed");
+            throw_openssl_error("sha256: EVP_DigestInit_ex failed");
         }
     }
 
@@ -39,14 +62,12 @@ public:
         }
 
         if (::EVP_DigestUpdate(m_ctx.get(), in.data(), in.size()) != 1) {
-            throw std::runtime_error("sha256: EVP_DigestUpdate failed");
+            throw_openssl_error("sha256: EVP_DigestUpdate failed");
         }
     }
 
     void finalize(std::span<std::byte> out) {
-        if (out.size() < digest_size()) {
-            throw std::invalid_argument("sha256::finalize: output size is too small");
-        }
+        assert(out.size() >= digest_size());
 
         unsigned int len = 0;
 
@@ -57,7 +78,7 @@ public:
         );
 
         if (res != 1) {
-            throw std::runtime_error("sha256: EVP_DigestFinal_ex failed");
+            throw_openssl_error("sha256: EVP_DigestFinal_ex failed");
         }
 
         assert(len == digest_size());
