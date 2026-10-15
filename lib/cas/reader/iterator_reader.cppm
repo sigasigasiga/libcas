@@ -8,6 +8,8 @@ module;
 
 export module cas.reader:iterator_reader;
 
+import cas.result;
+
 namespace cas::reader {
 
 export template<std::input_iterator I, std::sentinel_for<I> S>
@@ -22,7 +24,7 @@ public:
     }
 
 public: // reader
-    std::size_t read(std::span<std::byte> out) {
+    result::result<std::size_t> read(std::span<std::byte> out) {
         std::size_t n = 0;
         for (; n < out.size() && m_it != m_sent; ++n, ++m_it) {
             out[n] = *m_it;

@@ -13,3 +13,9 @@ target_sources(
 
     module.cppm
 )
+
+target_link_libraries(
+    cas.reader
+
+    cas.result
+)
