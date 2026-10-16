@@ -12,6 +12,7 @@ namespace cas::reader {
 
 export template<typename T>
 concept reader = requires(T v, std::span<std::byte> out) {
+    // returns `0` on EOF
     { v.read(out) } -> std::same_as<result::result<std::size_t>>;
 };
 
