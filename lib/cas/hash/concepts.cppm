@@ -20,7 +20,7 @@ concept hash =
         h.feed(in);
 
         // hasher cannot be used after this function is invoked
-        h.finalize(out);
+        std::move(h).finalize(out);
     };
 
 } // namespace cas::hash

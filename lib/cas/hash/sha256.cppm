@@ -66,7 +66,7 @@ public:
         }
     }
 
-    void finalize(std::span<std::byte> out) {
+    void finalize(std::span<std::byte> out) && {
         assert(out.size() >= digest_size());
 
         unsigned int len = 0;
