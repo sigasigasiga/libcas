@@ -15,7 +15,6 @@ set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(OpenSSL REQUIRED)
-find_package(ZLIB REQUIRED)
 add_subdirectory(third_party/grace EXCLUDE_FROM_ALL)
 
 enable_testing()

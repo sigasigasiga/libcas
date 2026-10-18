@@ -8,9 +8,11 @@ target_sources(
     FILE_SET
     CXX_MODULES FILES
 
+    concepts.cppm
+    file_writer.cppm
     object_path.cppm
-    temp_file.cppm
-    writer.cppm
+    storage_writer.cppm
+    temp_path.cppm
 
     module.cppm
 )
@@ -18,7 +20,6 @@ target_sources(
 target_link_libraries(
     cas.storage.fs
 
-    cas.compression
     cas.hash
     cas.result
     cas.storage
