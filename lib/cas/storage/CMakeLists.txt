@@ -22,3 +22,5 @@ target_link_libraries(
     cas.reader
     cas.result
 )
+
+add_subdirectory(fs)
