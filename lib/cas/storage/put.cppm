@@ -23,6 +23,10 @@ auto put(Writer &writer, Reader &reader)
     -> result::result<object_handle>
 {
     auto tx = writer.begin_transaction();
+    if (!tx) {
+        return std::unexpected(tx.error());
+    }
+
     std::array<std::byte, put_chunk_size> chunk;
 
     while (true) {
@@ -35,13 +39,13 @@ auto put(Writer &writer, Reader &reader)
             break;
         }
 
-        auto written = tx.write(std::span(chunk).first(*n));
+        auto written = tx->write(std::span(chunk).first(*n));
         if (!written) {
             return std::unexpected(written.error());
         }
     }
 
-    return std::move(tx).commit();
+    return std::move(*tx).commit();
 }
 
 } // namespace cas::storage

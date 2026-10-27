@@ -25,8 +25,9 @@ concept write_transaction =
 export template<typename T>
 concept storage_writer =
     hash::hash<typename T::hash_type> &&
+    write_transaction<typename T::transaction_type> &&
     requires (T v) {
-        { v.begin_transaction() } -> write_transaction;
+        { v.begin_transaction() } -> std::same_as<result::result<typename T::transaction_type>>;
     };
 
 } // namespace cas::storage
