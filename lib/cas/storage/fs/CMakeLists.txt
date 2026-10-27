@@ -10,7 +10,7 @@ target_sources(
 
     concepts.cppm
     file_writer.cppm
-    object_path.cppm
+    make_object_path.cppm
     storage_writer.cppm
     temp_path.cppm
 
@@ -20,7 +20,13 @@ target_sources(
 target_link_libraries(
     cas.storage.fs
 
+    PUBLIC
+
     cas.hash
     cas.result
     cas.storage
+
+    PRIVATE
+
+    grace.fn.bind
 )

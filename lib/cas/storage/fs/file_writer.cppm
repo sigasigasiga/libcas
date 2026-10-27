@@ -2,14 +2,17 @@ module;
 
 #include <cerrno>
 #include <cstddef>
+#include <cstdio>
 #include <expected>
+#include <memory>
 #include <span>
 #include <system_error>
-#include <utility>
 
 #include <unistd.h>
 
 export module cas.storage.fs:file_writer;
+
+import grace.fn.bind;
 
 import cas.result;
 
@@ -27,68 +30,44 @@ std::system_error last_error(char const *what) {
 export class file_writer
 {
 public:
-    // takes the ownership of `fd`
-    explicit file_writer(int fd)
-        : m_fd(fd)
+    // takes the ownership of `file`
+    explicit file_writer(std::FILE &file)
+        : m_file(&file)
     {
     }
-
-    file_writer(file_writer &&rhs) noexcept
-        : m_fd(std::exchange(rhs.m_fd, -1))
-    {
-    }
-
-    file_writer &operator=(file_writer &&rhs) noexcept {
-        if (this != &rhs) {
-            reset();
-            m_fd = std::exchange(rhs.m_fd, -1);
-        }
-
-        return *this;
-    }
-
-    ~file_writer() { reset(); }
 
 public: // writer
     result::result<void> write(std::span<std::byte const> data) {
-        while (!data.empty()) {
-            auto const n = ::write(m_fd, data.data(), data.size());
-            if (n < 0) {
-                if (errno == EINTR) {
-                    continue;
-                }
+        if (data.empty()) {
+            return {};
+        }
 
-                return std::unexpected(detail::last_error("fs::file_writer: write failed"));
-            }
-
-            data = data.subspan(static_cast<std::size_t>(n));
+        if (std::fwrite(data.data(), 1, data.size(), m_file.get()) != data.size()) {
+            return std::unexpected(detail::last_error("fs::file_writer: fwrite failed"));
         }
 
         return {};
     }
 
     result::result<void> finalize() && {
-        if (::fsync(m_fd) != 0) {
+        if (std::fflush(m_file.get()) != 0) {
+            return std::unexpected(detail::last_error("fs::file_writer: fflush failed"));
+        }
+
+        if (::fsync(::fileno(m_file.get())) != 0) {
             return std::unexpected(detail::last_error("fs::file_writer: fsync failed"));
         }
 
-        // the descriptor is released even if `close` fails
-        if (::close(std::exchange(m_fd, -1)) != 0) {
-            return std::unexpected(detail::last_error("fs::file_writer: close failed"));
+        // the file is released even if `fclose` fails
+        if (std::fclose(m_file.release()) != 0) {
+            return std::unexpected(detail::last_error("fs::file_writer: fclose failed"));
         }
 
         return {};
     }
 
 private:
-    void reset() noexcept {
-        if (m_fd >= 0) {
-            ::close(std::exchange(m_fd, -1));
-        }
-    }
-
-private:
-    int m_fd;
+    std::unique_ptr<std::FILE, grace::fn::bind::lift_invocable<::fclose>> m_file;
 };
 
 } // namespace cas::storage::fs

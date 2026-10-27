@@ -30,7 +30,7 @@ using cas::hash::to_hex;
 using cas::storage::object_handle;
 using cas::storage::put;
 using cas::storage::fs::file_writer;
-using cas::storage::fs::object_path;
+using cas::storage::fs::make_object_path;
 
 namespace {
 
@@ -193,11 +193,11 @@ TEMPLATE_TEST_CASE(
     STATIC_REQUIRE(cas::storage::storage_writer<TestType>);
 }
 
-TEST_CASE("object_path follows the git loose objects layout", "[storage][fs]") {
+TEST_CASE("make_object_path follows the git loose objects layout", "[storage][fs]") {
     std::vector<std::byte> digest;
     cas::hash::from_hex(abc_hex, std::back_inserter(digest));
 
-    auto const path = object_path("root", object_handle(digest));
+    auto const path = make_object_path("root", object_handle(digest));
 
     CHECK(path == fs::path("root") / "ba" / "7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 }
@@ -211,7 +211,7 @@ TEST_CASE("fs::storage_writer stores objects", "[storage][fs]") {
 
         REQUIRE(handle);
         CHECK(to_hex_string(*handle) == abc_hex);
-        CHECK(read_file(object_path(dir.path(), *handle)) == make_bytes("abc"));
+        CHECK(read_file(make_object_path(dir.path(), *handle)) == make_bytes("abc"));
         CHECK(list_entries(dir.path()) == std::vector<std::string>{"ba", "ba/7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"});
     }
 
@@ -220,7 +220,7 @@ TEST_CASE("fs::storage_writer stores objects", "[storage][fs]") {
 
         REQUIRE(handle);
         CHECK(to_hex_string(*handle) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-        CHECK(read_file(object_path(dir.path(), *handle)).empty());
+        CHECK(read_file(make_object_path(dir.path(), *handle)).empty());
     }
 
     SECTION("large input") {
@@ -228,7 +228,7 @@ TEST_CASE("fs::storage_writer stores objects", "[storage][fs]") {
         auto const handle = put_bytes(storage, data);
 
         REQUIRE(handle);
-        CHECK(read_file(object_path(dir.path(), *handle)) == data);
+        CHECK(read_file(make_object_path(dir.path(), *handle)) == data);
     }
 }
 
@@ -240,7 +240,7 @@ TEST_CASE("fs::storage_writer addresses objects by the data before the writer tr
     auto const handle = put_bytes(storage, data);
 
     REQUIRE(handle);
-    CHECK(read_file(object_path(dir.path(), *handle)) == invert(data));
+    CHECK(read_file(make_object_path(dir.path(), *handle)) == invert(data));
 
     temp_dir plain_dir;
     plain_storage plain(plain_dir.path());
@@ -260,7 +260,7 @@ TEST_CASE("fs::storage_writer stores each object once", "[storage][fs]") {
     REQUIRE(first);
     REQUIRE(second);
     CHECK(to_hex_string(*first) == to_hex_string(*second));
-    CHECK(read_file(object_path(dir.path(), *first)) == make_bytes("abc"));
+    CHECK(read_file(make_object_path(dir.path(), *first)) == make_bytes("abc"));
     CHECK(list_entries(dir.path()).size() == 2);
 }
 
@@ -273,8 +273,8 @@ TEST_CASE("fs::storage_writer stores distinct objects side by side", "[storage][
 
     REQUIRE(a);
     REQUIRE(b);
-    CHECK(read_file(object_path(dir.path(), *a)) == make_bytes("a"));
-    CHECK(read_file(object_path(dir.path(), *b)) == make_bytes("b"));
+    CHECK(read_file(make_object_path(dir.path(), *a)) == make_bytes("a"));
+    CHECK(read_file(make_object_path(dir.path(), *b)) == make_bytes("b"));
 }
 
 TEST_CASE("fs::storage_writer makes objects read-only", "[storage][fs]") {
@@ -285,7 +285,7 @@ TEST_CASE("fs::storage_writer makes objects read-only", "[storage][fs]") {
 
     REQUIRE(handle);
 
-    auto const perms = fs::status(object_path(dir.path(), *handle)).permissions();
+    auto const perms = fs::status(make_object_path(dir.path(), *handle)).permissions();
     CHECK((perms & fs::perms::all) == (fs::perms::owner_read | fs::perms::group_read | fs::perms::others_read));
 }
 
@@ -295,8 +295,10 @@ TEST_CASE("fs::storage_writer leaves nothing behind if the transaction is not co
 
     {
         auto tx = storage.begin_transaction();
+        REQUIRE(tx);
+
         auto const data = make_bytes("abc");
-        REQUIRE(tx.write(data));
+        REQUIRE(tx->write(data));
         CHECK(!list_entries(dir.path()).empty());
     }
 
@@ -309,24 +311,9 @@ TEST_CASE("fs::storage_writer reports filesystem errors", "[storage][fs]") {
     SECTION("missing root") {
         plain_storage storage(dir.path() / "missing");
 
-        auto tx = storage.begin_transaction();
-        auto const data = make_bytes("abc");
-
-        auto const written = tx.write(data);
-        REQUIRE(!written);
-        CHECK_THROWS_AS(written.error().throw_exception(), std::system_error);
-
-        auto const handle = std::move(tx).commit();
-        REQUIRE(!handle);
-        CHECK_THROWS_AS(handle.error().throw_exception(), std::system_error);
-    }
-
-    SECTION("missing root without writes") {
-        plain_storage storage(dir.path() / "missing");
-
-        auto const handle = put_bytes(storage, {});
-        REQUIRE(!handle);
-        CHECK_THROWS_AS(handle.error().throw_exception(), std::system_error);
+        auto const tx = storage.begin_transaction();
+        REQUIRE(!tx);
+        CHECK_THROWS_AS(tx.error().throw_exception(), std::system_error);
     }
 
     SECTION("object directory cannot be created") {
@@ -351,22 +338,23 @@ TEST_CASE("fs::storage_writer reports writer errors", "[storage][fs]") {
         failures.fail_write_at = 1;
 
         auto tx = storage.begin_transaction();
+        REQUIRE(tx);
+
         auto const data = make_bytes("abc");
+        REQUIRE(tx->write(data));
 
-        REQUIRE(tx.write(data));
-
-        auto const written = tx.write(data);
+        auto const written = tx->write(data);
         REQUIRE(!written);
         CHECK_THROWS_WITH(written.error().throw_exception(), "write failed");
 
         // the writer is not asked again once it has failed
         failures = {};
 
-        auto const again = tx.write(data);
+        auto const again = tx->write(data);
         REQUIRE(!again);
         CHECK_THROWS_WITH(again.error().throw_exception(), "write failed");
 
-        auto const handle = std::move(tx).commit();
+        auto const handle = std::move(*tx).commit();
         REQUIRE(!handle);
         CHECK_THROWS_WITH(handle.error().throw_exception(), "write failed");
     }

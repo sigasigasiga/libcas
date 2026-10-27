@@ -3,6 +3,7 @@ module;
 #include <array>
 #include <concepts>
 #include <cstddef>
+#include <cstdio>
 #include <expected>
 #include <filesystem>
 #include <span>
@@ -12,12 +13,13 @@ module;
 
 #include <fcntl.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 export module cas.storage.fs:storage_writer;
 
 import :concepts;
 import :file_writer;
-import :object_path;
+import :make_object_path;
 import :temp_path;
 
 import cas.hash;
@@ -35,7 +37,7 @@ public:
     using hash_type = Hash;
 
 public:
-    transaction(std::filesystem::path root, temp_path path, result::result<Writer> writer)
+    transaction(std::filesystem::path root, temp_path path, Writer writer)
         : m_root(std::move(root))
         , m_path(std::move(path))
         , m_writer(std::move(writer))
@@ -44,15 +46,14 @@ public:
 
 public: // write_transaction
     result::result<void> write(std::span<std::byte const> chunk) {
-        if (!m_writer) {
-            return std::unexpected(m_writer.error());
+        if (!m_status) {
+            return m_status;
         }
 
-        auto written = m_writer->write(chunk);
-        if (!written) {
+        m_status = m_writer.write(chunk);
+        if (!m_status) {
             // the file no longer matches the hash, so the transaction cannot be committed
-            m_writer = std::unexpected(written.error());
-            return written;
+            return m_status;
         }
 
         m_hash.feed(chunk);
@@ -60,11 +61,11 @@ public: // write_transaction
     }
 
     result::result<object_handle> commit() && {
-        if (!m_writer) {
-            return std::unexpected(m_writer.error());
+        if (!m_status) {
+            return std::unexpected(m_status.error());
         }
 
-        if (auto finalized = std::move(*m_writer).finalize(); !finalized) {
+        if (auto finalized = std::move(m_writer).finalize(); !finalized) {
             return std::unexpected(finalized.error());
         }
 
@@ -85,7 +86,7 @@ public: // write_transaction
         std::move(m_hash).finalize(digest);
 
         object_handle handle(std::span(digest).first(digest_size));
-        auto const path = object_path(m_root, handle);
+        auto const path = make_object_path(m_root, handle);
 
         stdfs::create_directory(path.parent_path(), ec);
         if (ec) {
@@ -109,8 +110,9 @@ public: // write_transaction
 private:
     std::filesystem::path m_root;
     temp_path m_path;
-    result::result<Writer> m_writer;
+    Writer m_writer;
     Hash m_hash;
+    result::result<void> m_status;
 };
 
 // Stores objects in `root`, which must be an existing directory.
@@ -133,21 +135,24 @@ public:
     std::filesystem::path const &root() const { return m_root; }
 
 public: // storage_writer
-    transaction_type begin_transaction() const {
+    result::result<transaction_type> begin_transaction() const {
         auto name = (m_root / "tmp_obj_XXXXXX").string();
 
         int const fd = ::mkostemp(name.data(), O_CLOEXEC);
         if (fd < 0) {
-            return transaction_type(
-                m_root,
-                temp_path(),
-                std::unexpected(detail::last_error("fs::storage_writer: mkostemp failed"))
-            );
+            return std::unexpected(detail::last_error("fs::storage_writer: mkostemp failed"));
         }
 
         temp_path path(std::move(name));
-        file_writer file(fd);
-        return transaction_type(m_root, std::move(path), Writer(std::move(file)));
+
+        std::FILE *file = ::fdopen(fd, "wb");
+        if (!file) {
+            auto error = detail::last_error("fs::storage_writer: fdopen failed");
+            ::close(fd);
+            return std::unexpected(std::move(error));
+        }
+
+        return transaction_type(m_root, std::move(path), Writer(file_writer(*file)));
     }
 
 private:

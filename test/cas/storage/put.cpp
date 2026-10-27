@@ -30,6 +30,7 @@ struct writer_state
     std::size_t transactions = 0;
     std::size_t commits = 0;
     std::size_t fail_write_at = static_cast<std::size_t>(-1);
+    bool fail_begin = false;
 };
 
 class fake_transaction
@@ -71,6 +72,7 @@ class fake_writer
 {
 public:
     using hash_type = cas::hash::sha256;
+    using transaction_type = fake_transaction;
 
     explicit fake_writer(writer_state &state)
         : m_state(&state)
@@ -78,7 +80,11 @@ public:
     }
 
 public: // storage_writer
-    fake_transaction begin_transaction() {
+    cas::result::result<fake_transaction> begin_transaction() {
+        if (m_state->fail_begin) {
+            return std::unexpected(std::runtime_error("begin_transaction failed"));
+        }
+
         ++m_state->transactions;
         return fake_transaction(*m_state);
     }
@@ -206,5 +212,19 @@ TEST_CASE("put propagates errors without committing", "[storage][put]") {
     }
 
     CHECK(state.transactions == 1);
+    CHECK(state.commits == 0);
+}
+
+TEST_CASE("put propagates begin_transaction errors", "[storage][put]") {
+    writer_state state;
+    state.fail_begin = true;
+    fake_writer writer(state);
+
+    auto const handle = put_bytes(writer, make_bytes("abc"));
+
+    REQUIRE(!handle);
+    CHECK_THROWS_WITH(handle.error().throw_exception(), "begin_transaction failed");
+    CHECK(state.chunks.empty());
+    CHECK(state.transactions == 0);
     CHECK(state.commits == 0);
 }

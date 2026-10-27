@@ -1,4 +1,5 @@
 #include <cstddef>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -8,9 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include <fcntl.h>
 #include <stdlib.h>
-#include <unistd.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -64,10 +63,10 @@ std::vector<std::byte> read_file(fs::path const &path) {
     return ret;
 }
 
-file_writer open_writer(fs::path const &path) {
-    int const fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
-    REQUIRE(fd >= 0);
-    return file_writer(fd);
+file_writer open_writer(fs::path const &path, char const *mode = "wbx") {
+    std::FILE *file = std::fopen(path.c_str(), mode);
+    REQUIRE(file != nullptr);
+    return file_writer(*file);
 }
 
 } // namespace
@@ -121,9 +120,8 @@ TEST_CASE("file_writer reports errors", "[storage][fs][file_writer]") {
     temp_dir dir;
     auto const path = dir.path() / "file";
 
-    int const fd = ::open(path.c_str(), O_RDONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
-    REQUIRE(fd >= 0);
-    file_writer writer(fd);
+    std::ofstream(path).put('x');
+    auto writer = open_writer(path, "rb");
 
     auto const written = writer.write(make_bytes(10));
     REQUIRE(!written);
