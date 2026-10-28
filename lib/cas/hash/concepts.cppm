@@ -2,6 +2,7 @@ module;
 
 #include <concepts>
 #include <span>
+#include <utility>
 
 export module cas.hash:concepts;
 
@@ -15,11 +16,11 @@ concept hash =
         std::span<std::byte const> in,
         std::span<std::byte> out
     ) {
-        { h.digest_size() } -> std::same_as<std::size_t>;
+        { std::as_const(h).digest_size() } -> std::same_as<std::size_t>;
 
         h.feed(in);
 
-        // hasher cannot be used after this function is invoked
+        // `feed` cannot be used after this function is invoked
         std::move(h).finalize(out);
     };
 
