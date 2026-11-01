@@ -9,7 +9,7 @@ namespace cas::util {
 
 export struct file_deleter
 {
-    void operator()(std::FILE *file) const noexcept {
+    static void operator()(std::FILE *file) noexcept {
         std::fclose(file);
     }
 };

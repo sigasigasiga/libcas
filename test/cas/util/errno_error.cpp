@@ -14,3 +14,11 @@ TEST_CASE("errno_error captures the current errno", "[util][errno_error]") {
     CHECK(error.code().category() == std::generic_category());
     CHECK(std::string(error.what()).starts_with("something failed"));
 }
+
+TEST_CASE("errno_error accepts an explicit errno value", "[util][errno_error]") {
+    errno = 0;
+    auto const error = cas::util::errno_error(EACCES, "something failed");
+
+    CHECK(error.code() == std::errc::permission_denied);
+    CHECK(error.code().category() == std::generic_category());
+}

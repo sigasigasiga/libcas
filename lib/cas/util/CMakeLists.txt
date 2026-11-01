@@ -9,6 +9,7 @@ target_sources(
     CXX_MODULES FILES
 
     errno_error.cppm
+    posix.cppm
     unique_file.cppm
 
     module.cppm

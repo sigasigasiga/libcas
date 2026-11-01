@@ -1,6 +1,7 @@
 module;
 
 #include <array>
+#include <cerrno>
 #include <cstddef>
 #include <expected>
 #include <filesystem>
@@ -82,12 +83,10 @@ public: // write_transaction
         }
 
         // an existing object has the same content, so it is fine to replace it
-        stdfs::rename(m_temp_path.get(), path, ec);
-        if (ec) {
-            return std::unexpected(std::system_error(ec, "fs::transaction: cannot rename the object"));
+        if (auto renamed = rename_to(std::move(m_temp_path), path); !renamed) {
+            return std::unexpected(renamed.error());
         }
 
-        m_temp_path.release();
         return handle;
     }
 
@@ -118,7 +117,7 @@ public:
 
 public: // storage_writer
     result::result<transaction_type> begin_transaction() const {
-        auto name = (m_root / "tmp_obj_XXXXXX").string();
+        auto name = (m_root / "tmp_obj_XXXXXX").native();
 
         int const fd = ::mkostemp(name.data(), O_CLOEXEC);
         if (fd < 0) {
@@ -129,9 +128,10 @@ public: // storage_writer
 
         util::unique_file file(::fdopen(fd, "wb"));
         if (!file) {
-            auto error = util::errno_error("fs::storage_writer: fdopen failed");
+            // `errno_error` may throw, so the descriptor is closed first
+            int const error = errno;
             ::close(fd);
-            return std::unexpected(std::move(error));
+            return std::unexpected(util::errno_error(error, "fs::storage_writer: fdopen failed"));
         }
 
         return transaction_type(m_root, std::move(path), Writer(std::move(file)));

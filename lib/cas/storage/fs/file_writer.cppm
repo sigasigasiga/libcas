@@ -17,9 +17,6 @@ import cas.util;
 namespace cas::storage::fs {
 
 // Writes the data to a file as is.
-//
-// POSIX requires the stdio functions to set `errno` on failure,
-// so it is used to describe the errors.
 export class file_writer
 {
 public:
@@ -34,6 +31,9 @@ public: // writer
         if (data.empty()) {
             return {};
         }
+
+        // ISO C does not require the stdio functions to set `errno` on failure, but POSIX does
+        static_assert(util::is_posix, "fs::file_writer relies on stdio functions setting `errno`");
 
         if (std::fwrite(data.data(), 1, data.size(), m_file.get()) != data.size()) {
             return std::unexpected(util::errno_error("fs::file_writer: fwrite failed"));
