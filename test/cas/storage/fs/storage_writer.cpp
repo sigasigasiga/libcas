@@ -23,6 +23,7 @@ import cas.reader;
 import cas.result;
 import cas.storage;
 import cas.storage.fs;
+import cas.util;
 
 namespace fs = std::filesystem;
 
@@ -40,7 +41,7 @@ constexpr std::string_view abc_hex = "ba7816bf8f01cfea414140de5dae2223b00361a396
 class inverting_writer
 {
 public:
-    explicit inverting_writer(file_writer file)
+    explicit inverting_writer(cas::util::unique_file file)
         : m_file(std::move(file))
     {
     }
@@ -75,7 +76,7 @@ failure_state failures;
 class failing_writer
 {
 public:
-    explicit failing_writer(file_writer file)
+    explicit failing_writer(cas::util::unique_file file)
         : m_file(std::move(file))
     {
     }
@@ -100,7 +101,7 @@ private:
     std::size_t m_writes = 0;
 };
 
-using plain_storage = cas::storage::fs::storage_writer<cas::hash::sha256>;
+using plain_storage = cas::storage::fs::storage_writer<cas::hash::sha256, file_writer>;
 using inverting_storage = cas::storage::fs::storage_writer<cas::hash::sha256, inverting_writer>;
 using failing_storage = cas::storage::fs::storage_writer<cas::hash::sha256, failing_writer>;
 
@@ -334,27 +335,10 @@ TEST_CASE("fs::storage_writer reports writer errors", "[storage][fs]") {
     failing_storage storage(dir.path());
     failures = {};
 
-    SECTION("a failed write prevents the commit") {
+    SECTION("write error") {
         failures.fail_write_at = 1;
 
-        auto tx = storage.begin_transaction();
-        REQUIRE(tx);
-
-        auto const data = make_bytes("abc");
-        REQUIRE(tx->write(data));
-
-        auto const written = tx->write(data);
-        REQUIRE(!written);
-        CHECK_THROWS_WITH(written.error().throw_exception(), "write failed");
-
-        // the writer is not asked again once it has failed
-        failures = {};
-
-        auto const again = tx->write(data);
-        REQUIRE(!again);
-        CHECK_THROWS_WITH(again.error().throw_exception(), "write failed");
-
-        auto const handle = std::move(*tx).commit();
+        auto const handle = put_bytes(storage, make_bytes(1024 * 1024));
         REQUIRE(!handle);
         CHECK_THROWS_WITH(handle.error().throw_exception(), "write failed");
     }

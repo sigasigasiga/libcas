@@ -18,6 +18,8 @@ export template<typename T>
 concept write_transaction =
     hash::hash<typename T::hash_type> &&
     requires (T v, std::span<std::byte const> chunk) {
+        // if this function fails, the transaction is left in a valid but unspecified state,
+        // so it may only be destroyed
         { v.write(chunk) } -> std::same_as<result::result<void>>;
         { std::move(v).commit() } -> std::same_as<result::result<object_handle>>;
     };

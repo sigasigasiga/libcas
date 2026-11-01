@@ -14,6 +14,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 import cas.storage.fs;
+import cas.util;
 
 namespace fs = std::filesystem;
 
@@ -64,9 +65,9 @@ std::vector<std::byte> read_file(fs::path const &path) {
 }
 
 file_writer open_writer(fs::path const &path, char const *mode = "wbx") {
-    std::FILE *file = std::fopen(path.c_str(), mode);
-    REQUIRE(file != nullptr);
-    return file_writer(*file);
+    cas::util::unique_file file(std::fopen(path.c_str(), mode));
+    REQUIRE(file);
+    return file_writer(std::move(file));
 }
 
 } // namespace

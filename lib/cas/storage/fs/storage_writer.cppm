@@ -1,9 +1,7 @@
 module;
 
 #include <array>
-#include <concepts>
 #include <cstddef>
-#include <cstdio>
 #include <expected>
 #include <filesystem>
 #include <span>
@@ -18,13 +16,13 @@ module;
 export module cas.storage.fs:storage_writer;
 
 import :concepts;
-import :file_writer;
 import :make_object_path;
 import :temp_path;
 
 import cas.hash;
 import cas.result;
 import cas.storage;
+import cas.util;
 
 namespace cas::storage::fs {
 
@@ -37,34 +35,24 @@ public:
     using hash_type = Hash;
 
 public:
-    transaction(std::filesystem::path root, temp_path path, Writer writer)
+    transaction(std::filesystem::path root, temp_path temp, Writer writer)
         : m_root(std::move(root))
-        , m_path(std::move(path))
+        , m_temp_path(std::move(temp))
         , m_writer(std::move(writer))
     {
     }
 
 public: // write_transaction
     result::result<void> write(std::span<std::byte const> chunk) {
-        if (!m_status) {
-            return m_status;
+        auto written = m_writer.write(chunk);
+        if (written) {
+            m_hash.feed(chunk);
         }
 
-        m_status = m_writer.write(chunk);
-        if (!m_status) {
-            // the file no longer matches the hash, so the transaction cannot be committed
-            return m_status;
-        }
-
-        m_hash.feed(chunk);
-        return {};
+        return written;
     }
 
     result::result<object_handle> commit() && {
-        if (!m_status) {
-            return std::unexpected(m_status.error());
-        }
-
         if (auto finalized = std::move(m_writer).finalize(); !finalized) {
             return std::unexpected(finalized.error());
         }
@@ -73,7 +61,7 @@ public: // write_transaction
         std::error_code ec;
 
         stdfs::permissions(
-            m_path.get(),
+            m_temp_path.get(),
             stdfs::perms::owner_read | stdfs::perms::group_read | stdfs::perms::others_read,
             ec
         );
@@ -93,32 +81,26 @@ public: // write_transaction
             return std::unexpected(std::system_error(ec, "fs::transaction: cannot create the object directory"));
         }
 
-        // objects are immutable, so an existing one is kept and the temporary file is dropped
-        if (stdfs::exists(path, ec)) {
-            return handle;
-        }
-
-        stdfs::rename(m_path.get(), path, ec);
+        // an existing object has the same content, so it is fine to replace it
+        stdfs::rename(m_temp_path.get(), path, ec);
         if (ec) {
             return std::unexpected(std::system_error(ec, "fs::transaction: cannot rename the object"));
         }
 
-        m_path.release();
+        m_temp_path.release();
         return handle;
     }
 
 private:
     std::filesystem::path m_root;
-    temp_path m_path;
+    temp_path m_temp_path;
     Writer m_writer;
     Hash m_hash;
-    result::result<void> m_status;
 };
 
 // Stores objects in `root`, which must be an existing directory.
-// Each object is written by a `Writer` constructed from the `file_writer` of its file.
-export template<hash::hash Hash, writer Writer = file_writer>
-requires std::constructible_from<Writer, file_writer>
+// Each object is written to its own file by a new `Writer`.
+export template<hash::hash Hash, writer Writer>
 class storage_writer
 {
 public:
@@ -140,19 +122,19 @@ public: // storage_writer
 
         int const fd = ::mkostemp(name.data(), O_CLOEXEC);
         if (fd < 0) {
-            return std::unexpected(detail::last_error("fs::storage_writer: mkostemp failed"));
+            return std::unexpected(util::errno_error("fs::storage_writer: mkostemp failed"));
         }
 
         temp_path path(std::move(name));
 
-        std::FILE *file = ::fdopen(fd, "wb");
+        util::unique_file file(::fdopen(fd, "wb"));
         if (!file) {
-            auto error = detail::last_error("fs::storage_writer: fdopen failed");
+            auto error = util::errno_error("fs::storage_writer: fdopen failed");
             ::close(fd);
             return std::unexpected(std::move(error));
         }
 
-        return transaction_type(m_root, std::move(path), Writer(file_writer(*file)));
+        return transaction_type(m_root, std::move(path), Writer(std::move(file)));
     }
 
 private:

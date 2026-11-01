@@ -25,8 +25,9 @@ target_link_libraries(
     cas.hash
     cas.result
     cas.storage
+    cas.util
 
     PRIVATE
 
-    grace.fn.bind
+    grace.utility
 )
