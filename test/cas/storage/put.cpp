@@ -6,7 +6,6 @@
 #include <span>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -17,10 +16,12 @@ import cas.hash;
 import cas.reader;
 import cas.result;
 import cas.storage;
+import cas.test.support;
 
 using cas::hash::to_hex;
 using cas::storage::object_handle;
 using cas::storage::put;
+using cas::test::support::make_bytes;
 
 namespace {
 
@@ -118,21 +119,6 @@ private:
     std::vector<std::byte> m_data;
     bool m_done = false;
 };
-
-std::vector<std::byte> make_bytes(std::size_t size) {
-    std::vector<std::byte> ret(size);
-    for (std::size_t i = 0; i < size; ++i) {
-        ret[i] = static_cast<std::byte>(i * 31 + 7);
-    }
-    return ret;
-}
-
-std::vector<std::byte> make_bytes(std::string_view s) {
-    return std::vector(
-        reinterpret_cast<std::byte const *>(s.data()),
-        reinterpret_cast<std::byte const *>(s.data() + s.size())
-    );
-}
 
 std::string to_hex_string(object_handle const &handle) {
     std::string ret;

@@ -2,67 +2,25 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
-#include <iterator>
 #include <span>
-#include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
 
-#include <stdlib.h>
-
 #include <catch2/catch_test_macros.hpp>
 
 import cas.storage.fs;
+import cas.test.support;
 import cas.util;
 
 namespace fs = std::filesystem;
 
 using cas::storage::fs::file_writer;
+using cas::test::support::make_bytes;
+using cas::test::support::read_file;
+using cas::test::support::temp_dir;
 
 namespace {
-
-class temp_dir
-{
-public:
-    temp_dir() {
-        auto name = (fs::temp_directory_path() / "cas_fs_test_XXXXXX").string();
-        REQUIRE(::mkdtemp(name.data()) != nullptr);
-        m_path = name;
-    }
-
-    temp_dir(temp_dir const &) = delete;
-    temp_dir &operator=(temp_dir const &) = delete;
-
-    ~temp_dir() {
-        std::error_code ec;
-        fs::remove_all(m_path, ec);
-    }
-
-    fs::path const &path() const { return m_path; }
-
-private:
-    fs::path m_path;
-};
-
-std::vector<std::byte> make_bytes(std::size_t size) {
-    std::vector<std::byte> ret(size);
-    for (std::size_t i = 0; i < size; ++i) {
-        ret[i] = static_cast<std::byte>(i * 31 + 7);
-    }
-    return ret;
-}
-
-std::vector<std::byte> read_file(fs::path const &path) {
-    std::ifstream in(path, std::ios::binary);
-    REQUIRE(in);
-
-    std::vector<std::byte> ret;
-    for (auto it = std::istreambuf_iterator<char>(in); it != std::istreambuf_iterator<char>(); ++it) {
-        ret.push_back(static_cast<std::byte>(*it));
-    }
-    return ret;
-}
 
 file_writer open_writer(fs::path const &path, char const *mode = "wbx") {
     cas::util::unique_file file(std::fopen(path.c_str(), mode));

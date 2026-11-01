@@ -12,8 +12,6 @@
 #include <utility>
 #include <vector>
 
-#include <stdlib.h>
-
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
@@ -23,6 +21,7 @@ import cas.reader;
 import cas.result;
 import cas.storage;
 import cas.storage.fs;
+import cas.test.support;
 import cas.util;
 
 namespace fs = std::filesystem;
@@ -32,6 +31,9 @@ using cas::storage::object_handle;
 using cas::storage::put;
 using cas::storage::fs::file_writer;
 using cas::storage::fs::make_object_path;
+using cas::test::support::make_bytes;
+using cas::test::support::read_file;
+using cas::test::support::temp_dir;
 
 namespace {
 
@@ -105,44 +107,6 @@ using plain_storage = cas::storage::fs::storage_writer<cas::hash::sha256, file_w
 using inverting_storage = cas::storage::fs::storage_writer<cas::hash::sha256, inverting_writer>;
 using failing_storage = cas::storage::fs::storage_writer<cas::hash::sha256, failing_writer>;
 
-class temp_dir
-{
-public:
-    temp_dir() {
-        auto name = (fs::temp_directory_path() / "cas_fs_test_XXXXXX").string();
-        REQUIRE(::mkdtemp(name.data()) != nullptr);
-        m_path = name;
-    }
-
-    temp_dir(temp_dir const &) = delete;
-    temp_dir &operator=(temp_dir const &) = delete;
-
-    ~temp_dir() {
-        std::error_code ec;
-        fs::remove_all(m_path, ec);
-    }
-
-    fs::path const &path() const { return m_path; }
-
-private:
-    fs::path m_path;
-};
-
-std::vector<std::byte> make_bytes(std::size_t size) {
-    std::vector<std::byte> ret(size);
-    for (std::size_t i = 0; i < size; ++i) {
-        ret[i] = static_cast<std::byte>(i * 31 + 7);
-    }
-    return ret;
-}
-
-std::vector<std::byte> make_bytes(std::string_view s) {
-    return std::vector(
-        reinterpret_cast<std::byte const *>(s.data()),
-        reinterpret_cast<std::byte const *>(s.data() + s.size())
-    );
-}
-
 std::vector<std::byte> invert(std::vector<std::byte> data) {
     for (auto &b : data) {
         b = ~b;
@@ -153,17 +117,6 @@ std::vector<std::byte> invert(std::vector<std::byte> data) {
 std::string to_hex_string(object_handle const &handle) {
     std::string ret;
     to_hex(handle.span(), std::back_inserter(ret));
-    return ret;
-}
-
-std::vector<std::byte> read_file(fs::path const &path) {
-    std::ifstream in(path, std::ios::binary);
-    REQUIRE(in);
-
-    std::vector<std::byte> ret;
-    for (auto it = std::istreambuf_iterator<char>(in); it != std::istreambuf_iterator<char>(); ++it) {
-        ret.push_back(static_cast<std::byte>(*it));
-    }
     return ret;
 }
 
