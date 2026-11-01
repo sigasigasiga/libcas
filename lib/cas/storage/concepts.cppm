@@ -18,6 +18,8 @@ export template<typename T>
 concept write_transaction =
     hash::hash<typename T::hash_type> &&
     requires (T v, std::span<std::byte const> chunk) {
+        // if this function fails, the transaction is left in a valid but unspecified state,
+        // so it may only be destroyed
         { v.write(chunk) } -> std::same_as<result::result<void>>;
         { std::move(v).commit() } -> std::same_as<result::result<object_handle>>;
     };
@@ -25,8 +27,9 @@ concept write_transaction =
 export template<typename T>
 concept storage_writer =
     hash::hash<typename T::hash_type> &&
+    write_transaction<typename T::transaction_type> &&
     requires (T v) {
-        { v.begin_transaction() } -> write_transaction;
+        { v.begin_transaction() } -> std::same_as<result::result<typename T::transaction_type>>;
     };
 
 } // namespace cas::storage

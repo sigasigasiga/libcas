@@ -6,7 +6,6 @@
 #include <span>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -17,10 +16,12 @@ import cas.hash;
 import cas.reader;
 import cas.result;
 import cas.storage;
+import cas.test.support;
 
 using cas::hash::to_hex;
 using cas::storage::object_handle;
 using cas::storage::put;
+using cas::test::support::make_bytes;
 
 namespace {
 
@@ -30,6 +31,7 @@ struct writer_state
     std::size_t transactions = 0;
     std::size_t commits = 0;
     std::size_t fail_write_at = static_cast<std::size_t>(-1);
+    bool fail_begin = false;
 };
 
 class fake_transaction
@@ -71,6 +73,7 @@ class fake_writer
 {
 public:
     using hash_type = cas::hash::sha256;
+    using transaction_type = fake_transaction;
 
     explicit fake_writer(writer_state &state)
         : m_state(&state)
@@ -78,7 +81,11 @@ public:
     }
 
 public: // storage_writer
-    fake_transaction begin_transaction() {
+    cas::result::result<fake_transaction> begin_transaction() {
+        if (m_state->fail_begin) {
+            return std::unexpected(std::runtime_error("begin_transaction failed"));
+        }
+
         ++m_state->transactions;
         return fake_transaction(*m_state);
     }
@@ -112,21 +119,6 @@ private:
     std::vector<std::byte> m_data;
     bool m_done = false;
 };
-
-std::vector<std::byte> make_bytes(std::size_t size) {
-    std::vector<std::byte> ret(size);
-    for (std::size_t i = 0; i < size; ++i) {
-        ret[i] = static_cast<std::byte>(i * 31 + 7);
-    }
-    return ret;
-}
-
-std::vector<std::byte> make_bytes(std::string_view s) {
-    return std::vector(
-        reinterpret_cast<std::byte const *>(s.data()),
-        reinterpret_cast<std::byte const *>(s.data() + s.size())
-    );
-}
 
 std::string to_hex_string(object_handle const &handle) {
     std::string ret;
@@ -206,5 +198,19 @@ TEST_CASE("put propagates errors without committing", "[storage][put]") {
     }
 
     CHECK(state.transactions == 1);
+    CHECK(state.commits == 0);
+}
+
+TEST_CASE("put propagates begin_transaction errors", "[storage][put]") {
+    writer_state state;
+    state.fail_begin = true;
+    fake_writer writer(state);
+
+    auto const handle = put_bytes(writer, make_bytes("abc"));
+
+    REQUIRE(!handle);
+    CHECK_THROWS_WITH(handle.error().throw_exception(), "begin_transaction failed");
+    CHECK(state.chunks.empty());
+    CHECK(state.transactions == 0);
     CHECK(state.commits == 0);
 }
